@@ -6,7 +6,6 @@
 //!
 //! Parameters are generally created through builders that provide sensible defaults, and ensure that
 //! any given settings are valid when built.
-use std::default::Default;
 use std::fmt::{self, Display};
 
 pub mod tree;
@@ -15,9 +14,9 @@ pub mod linear;
 pub mod dart;
 mod booster;
 
-use super::DMatrix;
+use crate::DMatrix;
 pub use self::booster::BoosterType;
-use super::booster::CustomObjective;
+use crate::booster::CustomObjective;
 
 /// Parameters for training boosters.
 /// Created using [`BoosterParametersBuilder`](struct.BoosterParametersBuilder.html).
@@ -105,7 +104,8 @@ impl BoosterParameters {
         v.extend(self.booster_type.as_string_pairs());
         v.extend(self.learning_params.as_string_pairs());
 
-        v.push(("silent".to_owned(), (!self.verbose as u8).to_string()));
+        let verbosity = if self.verbose { 1 } else { 0 };
+        v.push(("verbosity".to_owned(), verbosity.to_string()));
 
         if let Some(nthread) = self.threads {
             v.push(("nthread".to_owned(), nthread.to_string()));

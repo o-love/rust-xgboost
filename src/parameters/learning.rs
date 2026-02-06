@@ -1,15 +1,12 @@
 //! BoosterParameters for configuring learning objectives and evaluation metrics for all
 //! booster types.
 
-use std;
-use std::default::Default;
-
 use super::Interval;
 
 /// Learning objective used when training a booster model.
 pub enum Objective {
-    /// Linear regression.
-    RegLinear,
+    /// Regression with squared error loss.
+    RegSquaredError,
 
     /// Logistic regression.
     RegLogistic,
@@ -19,18 +16,6 @@ pub enum Objective {
 
     /// Logistic regression for binary classification, outputs scores before logistic transformation.
     BinaryLogisticRaw,
-
-    /// GPU version of [`RegLinear`](#variant.RegLinear).
-    GpuRegLinear,
-
-    /// GPU version of [`RegLogistic`](#variant.RegLogistic).
-    GpuRegLogistic,
-
-    /// GPU version of [`RegBinaryLogistic`](#variant.RegBinaryLogistic).
-    GpuBinaryLogistic,
-
-    /// GPU version of [`RegBinaryLogisticRaw`](#variant.RegBinaryLogisticRaw).
-    GpuBinaryLogisticRaw,
 
     /// Poisson regression for count data, outputs mean of poisson distribution.
     CountPoisson,
@@ -77,14 +62,10 @@ impl Clone for Objective {
 impl ToString for Objective {
     fn to_string(&self) -> String {
         match *self {
-            Objective::RegLinear => "reg:linear".to_owned(),
+            Objective::RegSquaredError => "reg:squarederror".to_owned(),
             Objective::RegLogistic => "reg:logistic".to_owned(),
             Objective::BinaryLogistic => "binary:logistic".to_owned(),
             Objective::BinaryLogisticRaw => "binary:logitraw".to_owned(),
-            Objective::GpuRegLinear => "gpu:reg:linear".to_owned(),
-            Objective::GpuRegLogistic => "gpu:reg:logistic".to_owned(),
-            Objective::GpuBinaryLogistic => "gpu:binary:logistic".to_owned(),
-            Objective::GpuBinaryLogisticRaw => "gpu:binary:logitraw".to_owned(),
             Objective::CountPoisson => "count:poisson".to_owned(),
             Objective::SurvivalCox => "survival:cox".to_owned(),
             Objective::MultiSoftmax(_) => "multi:softmax".to_owned(), // num_class conf must also be set
@@ -97,7 +78,7 @@ impl ToString for Objective {
 }
 
 impl Default for Objective {
-    fn default() -> Self { Objective::RegLinear }
+    fn default() -> Self { Objective::RegSquaredError }
 }
 
 /// Type of evaluation metrics to use during learning.
@@ -186,7 +167,7 @@ impl ToString for EvaluationMetric {
             EvaluationMetric::MAE => "mae".to_owned(),
             EvaluationMetric::LogLoss => "logloss".to_owned(),
             EvaluationMetric::BinaryErrorRate(t) => {
-                if (t - 0.5).abs() < std::f32::EPSILON {
+                if (t - 0.5).abs() < f32::EPSILON {
                     "error".to_owned()
                 } else {
                     format!("error@{}", t)

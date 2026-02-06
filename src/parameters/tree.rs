@@ -1,8 +1,6 @@
 //! BoosterParameters for controlling tree boosters.
 //!
 //!
-use std::default::Default;
-
 use super::Interval;
 
 /// The tree construction algorithm used in XGBoost (see description in the
@@ -29,9 +27,6 @@ pub enum TreeMethod {
     /// such as bins caching.
     Hist,
 
-    /// GPU implementation of exact algorithm.
-    GpuExact,
-
     /// GPU implementation of hist algorithm.
     GpuHist,
 }
@@ -43,7 +38,6 @@ impl ToString for TreeMethod {
             TreeMethod::Exact => "exact".to_owned(),
             TreeMethod::Approx => "approx".to_owned(),
             TreeMethod::Hist => "hist".to_owned(),
-            TreeMethod::GpuExact => "gpu_exact".to_owned(),
             TreeMethod::GpuHist => "gpu_hist".to_owned(),
         }
     }
@@ -72,7 +66,6 @@ impl<'a> From<&'a str> for TreeMethod
         "exact" => TreeMethod::Exact,
         "approx" => TreeMethod::Approx,
         "hist" => TreeMethod::Hist,
-        "gpu_exact" => TreeMethod::GpuExact,
         "gpu_hist" => TreeMethod::GpuHist,
         _ => panic!("no known tree_method for {}", s)
       }

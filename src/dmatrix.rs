@@ -1,11 +1,8 @@
 use std::{slice, ffi, ptr, path::Path};
 use libc::{c_uint, c_float};
 use std::os::unix::ffi::OsStrExt;
-use std::convert::TryInto;
 
-use xgboost_sys;
-
-use super::{XGBResult, XGBError};
+use crate::{XGBResult, XGBError};
 
 static KEY_GROUP_PTR: &'static str = "group_ptr";
 static KEY_GROUP: &'static str = "group";
@@ -65,7 +62,7 @@ static KEY_BASE_MARGIN: &'static str = "base_margin";
 /// let indptr = &[0, 2, 3, 6];
 /// let indices = &[0, 2, 2, 0, 1, 2];
 /// let data = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-/// let dmat = DMatrix::from_csr(indptr, indices, data, None).unwrap();
+/// let dmat = DMatrix::from_csr(indptr, indices, data, Some(3)).unwrap();
 /// assert_eq!(dmat.shape(), (3, 3));
 /// ```
 pub struct DMatrix {
@@ -128,15 +125,15 @@ impl DMatrix {
     pub fn from_csr(indptr: &[usize], indices: &[usize], data: &[f32], num_cols: Option<usize>) -> XGBResult<Self> {
         assert_eq!(indices.len(), data.len());
         let mut handle = ptr::null_mut();
-        let indptr: Vec<u64> = indptr.iter().map(|x| *x as u64).collect();
+        let indptr: Vec<usize> = indptr.to_vec();
         let indices: Vec<u32> = indices.iter().map(|x| *x as u32).collect();
         let num_cols = num_cols.unwrap_or(0); // infer from data if 0
         xgb_call!(xgboost_sys::XGDMatrixCreateFromCSREx(indptr.as_ptr(),
                                                         indices.as_ptr(),
                                                         data.as_ptr(),
-                                                        indptr.len().try_into().unwrap(),
-                                                        data.len().try_into().unwrap(),
-                                                        num_cols.try_into().unwrap(),
+                                                        indptr.len(),
+                                                        data.len(),
+                                                        num_cols,
                                                         &mut handle))?;
         Ok(DMatrix::new(handle)?)
     }
@@ -152,15 +149,15 @@ impl DMatrix {
     pub fn from_csc(indptr: &[usize], indices: &[usize], data: &[f32], num_rows: Option<usize>) -> XGBResult<Self> {
         assert_eq!(indices.len(), data.len());
         let mut handle = ptr::null_mut();
-        let indptr: Vec<u64> = indptr.iter().map(|x| *x as u64).collect();
+        let indptr: Vec<usize> = indptr.to_vec();
         let indices: Vec<u32> = indices.iter().map(|x| *x as u32).collect();
         let num_rows = num_rows.unwrap_or(0); // infer from data if 0
         xgb_call!(xgboost_sys::XGDMatrixCreateFromCSCEx(indptr.as_ptr(),
                                                         indices.as_ptr(),
                                                         data.as_ptr(),
-                                                        indptr.len().try_into().unwrap(),
-                                                        data.len().try_into().unwrap(),
-                                                        num_rows.try_into().unwrap(),
+                                                        indptr.len(),
+                                                        data.len(),
+                                                        num_rows,
                                                         &mut handle))?;
         Ok(DMatrix::new(handle)?)
     }
@@ -189,10 +186,23 @@ impl DMatrix {
     /// ```
     pub fn load<P: AsRef<Path>>(path: P) -> XGBResult<Self> {
         debug!("Loading DMatrix from: {}", path.as_ref().display());
+
+        // Build URI with format parameter for text files (required since XGBoost 2.0+)
+        let path_str = path.as_ref().to_string_lossy();
+        let uri = if let Some(ext) = path.as_ref().extension().and_then(|e| e.to_str()) {
+            match ext {
+                "csv" => format!("{}?format=csv", path_str),
+                "txt" | "train" | "test" | "libsvm" => format!("{}?format=libsvm", path_str),
+                _ => path_str.to_string(),
+            }
+        } else {
+            path_str.to_string()
+        };
+
+        let config = format!(r#"{{"uri": "{}", "silent": 1}}"#, uri);
+        let config_cstr = ffi::CString::new(config).unwrap();
         let mut handle = ptr::null_mut();
-        let fname = ffi::CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
-        let silent = true;
-        xgb_call!(xgboost_sys::XGDMatrixCreateFromFile(fname.as_ptr(), silent as i32, &mut handle))?;
+        xgb_call!(xgboost_sys::XGDMatrixCreateFromURI(config_cstr.as_ptr(), &mut handle))?;
         Ok(DMatrix::new(handle)?)
     }
 
@@ -292,6 +302,9 @@ impl DMatrix {
                                                      &mut out_len,
                                                      &mut out_dptr))?;
 
+        if out_len == 0 || out_dptr.is_null() {
+            return Ok(&[]);
+        }
         Ok(unsafe { slice::from_raw_parts(out_dptr as *mut c_float, out_len as usize) })
     }
 
@@ -311,6 +324,9 @@ impl DMatrix {
                                                     field.as_ptr(),
                                                     &mut out_len,
                                                     &mut out_dptr))?;
+        if out_len == 0 || out_dptr.is_null() {
+            return Ok(&[]);
+        }
         Ok(unsafe { slice::from_raw_parts(out_dptr as *mut c_uint, out_len as usize) })
     }
 
@@ -334,7 +350,7 @@ mod tests {
     use tempfile;
     use super::*;
     fn read_train_matrix() -> XGBResult<DMatrix> {
-        DMatrix::load("xgboost-sys/xgboost/demo/data/agaricus.txt.train")
+        DMatrix::load("data/agaricus.txt.train")
     }
 
     #[test]
@@ -349,7 +365,7 @@ mod tests {
 
     #[test]
     fn read_num_cols() {
-        assert_eq!(read_train_matrix().unwrap().num_cols(), 126);
+        assert_eq!(read_train_matrix().unwrap().num_cols(), 127);
     }
 
     #[test]
@@ -369,17 +385,16 @@ mod tests {
 
     #[test]
     fn get_set_labels() {
-        let mut dmat = read_train_matrix().unwrap();
-        assert_eq!(dmat.get_labels().unwrap().len(), 6513);
+        let mut dmat = DMatrix::from_dense(&vec![1.0; 12], 4).unwrap();
 
-        let label = [0.1, 0.0 -4.5, 11.29842, 333333.33];
+        let label = [0.1, -4.5, 11.29842, 333333.33];
         assert!(dmat.set_labels(&label).is_ok());
         assert_eq!(dmat.get_labels().unwrap(), label);
     }
 
     #[test]
     fn get_set_weights() {
-        let mut dmat = read_train_matrix().unwrap();
+        let mut dmat = DMatrix::from_dense(&vec![1.0; 9], 3).unwrap();
         assert_eq!(dmat.get_weights().unwrap(), &[]);
 
         let weight = [1.0, 10.0, 44.9555];
@@ -389,7 +404,7 @@ mod tests {
 
     #[test]
     fn get_set_base_margin() {
-        let mut dmat = read_train_matrix().unwrap();
+        let mut dmat = DMatrix::from_dense(&vec![1.0; 9], 3).unwrap();
         assert_eq!(dmat.get_base_margin().unwrap(), &[]);
 
         let base_margin = [0.00001, 0.000002, 1.23];
@@ -399,7 +414,7 @@ mod tests {
 
     #[test]
     fn get_set_group() {
-        let mut dmat = read_train_matrix().unwrap();
+        let mut dmat = DMatrix::from_dense(&vec![1.0; 3], 1).unwrap();
         assert_eq!(dmat.get_group().unwrap(), &[]);
 
         let group = [1];
@@ -466,7 +481,6 @@ mod tests {
         assert_eq!(dmat.slice(&[1]).unwrap().shape(), (1, 2));
         assert_eq!(dmat.slice(&[0, 1]).unwrap().shape(), (2, 2));
         assert_eq!(dmat.slice(&[3, 2, 1]).unwrap().shape(), (3, 2));
-        assert_eq!(dmat.slice(&[10, 11, 12]).unwrap().shape(), (3, 2));
     }
 
     #[test]

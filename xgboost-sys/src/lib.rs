@@ -10,12 +10,14 @@ mod tests {
 
     #[test]
     fn read_matrix() {
-        let dmat_train = "xgboost/demo/data/agaricus.txt.train";
+        // Use CARGO_MANIFEST_DIR to find data relative to workspace root
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let data_path = std::path::Path::new(manifest_dir).parent().unwrap().join("data/agaricus.txt.train");
+        let config = format!(r#"{{"uri": "{}?format=libsvm", "silent": 1}}"#, data_path.display());
 
-        let silent = 0;
         let mut handle = std::ptr::null_mut();
-        let fname = std::ffi::CString::new(dmat_train).unwrap();
-        let ret_val = unsafe { XGDMatrixCreateFromFile(fname.as_ptr(), silent, &mut handle) };
+        let config_cstr = std::ffi::CString::new(config).unwrap();
+        let ret_val = unsafe { XGDMatrixCreateFromURI(config_cstr.as_ptr(), &mut handle) };
         assert_eq!(ret_val, 0);
 
         let mut num_rows = 0;

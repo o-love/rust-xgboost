@@ -18,8 +18,6 @@
 //!     .build()
 //!     .unwrap();
 //! ```
-use std::default::Default;
-
 use super::{tree, linear, dart};
 
 /// Type of booster to use when training a [Booster](../struct.Booster.html) model.

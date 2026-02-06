@@ -1,7 +1,5 @@
 //! BoosterParameters for configuring linear boosters.
 
-use std::default::Default;
-
 /// Linear model algorithm.
 #[derive(Clone)]
 pub enum LinearUpdate {

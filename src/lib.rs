@@ -9,8 +9,6 @@
 //! # Basic usage example
 //!
 //! ```
-//! extern crate xgboost;
-//!
 //! use xgboost::{parameters, DMatrix, Booster};
 //!
 //! fn main() {
@@ -60,10 +58,6 @@
 extern crate derive_builder;
 #[macro_use]
 extern crate log;
-extern crate xgboost_sys;
-extern crate libc;
-extern crate tempfile;
-extern crate indexmap;
 
 macro_rules! xgb_call {
     ($x:expr) => {
