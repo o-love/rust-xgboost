@@ -135,10 +135,18 @@ fn find_system_lib_dir() -> Option<String> {
         "/usr/local/lib64",
     ];
 
+    let extensions = if cfg!(target_os = "macos") {
+        &["dylib", "a", "so"][..]
+    } else {
+        &["so", "a"][..]
+    };
+
     for candidate in &candidates {
-        let lib = format!("{}/libxgboost.so", candidate);
-        if std::path::Path::new(&lib).exists() {
-            return Some(candidate.to_string());
+        for ext in extensions {
+            let lib = format!("{}/libxgboost.{}", candidate, ext);
+            if std::path::Path::new(&lib).exists() {
+                return Some(candidate.to_string());
+            }
         }
     }
 
