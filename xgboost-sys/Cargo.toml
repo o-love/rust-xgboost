@@ -13,6 +13,9 @@ edition = "2021"
 [lib]
 doctest = false
 
+[features]
+cuda = []
+
 [dependencies]
 libc = "0.2"
 
