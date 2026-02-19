@@ -89,8 +89,10 @@ impl Booster {
 
     /// Get the model's internal JSON configuration.
     ///
-    /// This includes learner parameters, feature names, and feature types
-    /// stored during training.
+    /// This includes learner hyperparameters (objective, max_depth, etc.)
+    /// but does **not** include feature names or feature types.
+    /// Use [`get_feature_names`](Booster::get_feature_names) to retrieve
+    /// feature metadata.
     pub fn save_json_config(&self) -> XGBResult<String> {
         let mut out_len: u64 = 0;
         let mut out_str = ptr::null();
@@ -328,6 +330,32 @@ impl Booster {
         let key = ffi::CString::new(key).unwrap();
         let value = ffi::CString::new(value).unwrap();
         xgb_call!(xgboost_sys::XGBoosterSetAttr(self.handle, key.as_ptr(), value.as_ptr()))
+    }
+
+    /// Get the feature names stored in the model.
+    ///
+    /// Returns the feature names that were set during training (e.g. via `DMatrix.feature_names`).
+    /// Returns an empty `Vec` if no feature names were stored.
+    pub fn get_feature_names(&self) -> XGBResult<Vec<String>> {
+        let field = ffi::CString::new("feature_name").unwrap();
+        let mut out_len = 0;
+        let mut out = ptr::null_mut();
+        xgb_call!(xgboost_sys::XGBoosterGetStrFeatureInfo(
+            self.handle,
+            field.as_ptr(),
+            &mut out_len,
+            &mut out
+        ))?;
+
+        if out_len == 0 || out.is_null() {
+            return Ok(Vec::new());
+        }
+
+        let out_ptr_slice = unsafe { slice::from_raw_parts(out, out_len as usize) };
+        let out_vec = out_ptr_slice.iter()
+            .map(|str_ptr| unsafe { ffi::CStr::from_ptr(*str_ptr).to_str().unwrap().to_owned() })
+            .collect();
+        Ok(out_vec)
     }
 
     /// Get names of all attributes stored in this model. Values can then be fetched with calls to `get_attribute`.
