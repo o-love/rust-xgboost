@@ -87,6 +87,22 @@ impl Booster {
         xgb_call!(xgboost_sys::XGBoosterSaveModel(self.handle, fname.as_ptr()))
     }
 
+    /// Get the model's internal JSON configuration.
+    ///
+    /// This includes learner parameters, feature names, and feature types
+    /// stored during training.
+    pub fn save_json_config(&self) -> XGBResult<String> {
+        let mut out_len: u64 = 0;
+        let mut out_str = ptr::null();
+        xgb_call!(xgboost_sys::XGBoosterSaveJsonConfig(
+            self.handle,
+            &mut out_len,
+            &mut out_str
+        ))?;
+        let c_str = unsafe { ffi::CStr::from_ptr(out_str) };
+        Ok(c_str.to_str().unwrap().to_owned())
+    }
+
     /// Load a Booster from a binary file at given path.
     pub fn load<P: AsRef<Path>>(path: P) -> XGBResult<Self> {
         debug!("Loading Booster from: {}", path.as_ref().display());
