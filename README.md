@@ -10,7 +10,11 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-xgboost = "0.3"
+xgboost = { git = "https://github.com/o-love/rust-xgboost.git" }
+
+[patch.crates-io]
+xgboost-sys = { git = "https://github.com/o-love/rust-xgboost.git" }
+
 ```
 
 Basic example:
