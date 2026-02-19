@@ -10,6 +10,21 @@ static KEY_LABEL: &'static str = "label";
 static KEY_WEIGHT: &'static str = "weight";
 static KEY_BASE_MARGIN: &'static str = "base_margin";
 
+#[cfg(target_pointer_width = "64")]
+const USIZE_TYPESTR: &str = "<u8";
+#[cfg(target_pointer_width = "32")]
+const USIZE_TYPESTR: &str = "<u4";
+
+/// Create a JSON-encoded `__array_interface__` string for a contiguous 1D array.
+fn array_interface_str<T>(data: &[T], typestr: &str) -> String {
+    format!(
+        r#"{{"data": [{}, false], "shape": [{}], "typestr": "{}", "version": 3}}"#,
+        data.as_ptr() as usize,
+        data.len(),
+        typestr
+    )
+}
+
 /// Data matrix used throughout XGBoost for training/predicting [`Booster`](struct.Booster.html) models.
 ///
 /// It's used as a container for both features (i.e. a row for every instance), and an optional true label for that
@@ -125,16 +140,19 @@ impl DMatrix {
     pub fn from_csr(indptr: &[usize], indices: &[usize], data: &[f32], num_cols: Option<usize>) -> XGBResult<Self> {
         assert_eq!(indices.len(), data.len());
         let mut handle = ptr::null_mut();
-        let indptr: Vec<usize> = indptr.to_vec();
-        let indices: Vec<u32> = indices.iter().map(|x| *x as u32).collect();
-        let num_cols = num_cols.unwrap_or(0); // infer from data if 0
-        xgb_call!(xgboost_sys::XGDMatrixCreateFromCSREx(indptr.as_ptr(),
-                                                        indices.as_ptr(),
-                                                        data.as_ptr(),
-                                                        indptr.len(),
-                                                        data.len(),
-                                                        num_cols,
-                                                        &mut handle))?;
+        let num_cols = num_cols.unwrap_or(0) as xgboost_sys::bst_ulong;
+
+        let indptr_json = ffi::CString::new(array_interface_str(indptr, USIZE_TYPESTR)).unwrap();
+        let indices_json = ffi::CString::new(array_interface_str(indices, USIZE_TYPESTR)).unwrap();
+        let data_json = ffi::CString::new(array_interface_str(data, "<f4")).unwrap();
+        let config = ffi::CString::new(r#"{"missing": NaN}"#).unwrap();
+
+        xgb_call!(xgboost_sys::XGDMatrixCreateFromCSR(indptr_json.as_ptr(),
+                                                       indices_json.as_ptr(),
+                                                       data_json.as_ptr(),
+                                                       num_cols,
+                                                       config.as_ptr(),
+                                                       &mut handle))?;
         Ok(DMatrix::new(handle)?)
     }
 
@@ -149,16 +167,19 @@ impl DMatrix {
     pub fn from_csc(indptr: &[usize], indices: &[usize], data: &[f32], num_rows: Option<usize>) -> XGBResult<Self> {
         assert_eq!(indices.len(), data.len());
         let mut handle = ptr::null_mut();
-        let indptr: Vec<usize> = indptr.to_vec();
-        let indices: Vec<u32> = indices.iter().map(|x| *x as u32).collect();
-        let num_rows = num_rows.unwrap_or(0); // infer from data if 0
-        xgb_call!(xgboost_sys::XGDMatrixCreateFromCSCEx(indptr.as_ptr(),
-                                                        indices.as_ptr(),
-                                                        data.as_ptr(),
-                                                        indptr.len(),
-                                                        data.len(),
-                                                        num_rows,
-                                                        &mut handle))?;
+        let num_rows = num_rows.unwrap_or(0) as xgboost_sys::bst_ulong;
+
+        let indptr_json = ffi::CString::new(array_interface_str(indptr, USIZE_TYPESTR)).unwrap();
+        let indices_json = ffi::CString::new(array_interface_str(indices, USIZE_TYPESTR)).unwrap();
+        let data_json = ffi::CString::new(array_interface_str(data, "<f4")).unwrap();
+        let config = ffi::CString::new(r#"{"missing": NaN}"#).unwrap();
+
+        xgb_call!(xgboost_sys::XGDMatrixCreateFromCSC(indptr_json.as_ptr(),
+                                                       indices_json.as_ptr(),
+                                                       data_json.as_ptr(),
+                                                       num_rows,
+                                                       config.as_ptr(),
+                                                       &mut handle))?;
         Ok(DMatrix::new(handle)?)
     }
 
@@ -332,10 +353,10 @@ impl DMatrix {
 
     fn set_uint_info(&mut self, field: &str, array: &[u32]) -> XGBResult<()> {
         let field = ffi::CString::new(field).unwrap();
-        xgb_call!(xgboost_sys::XGDMatrixSetUIntInfo(self.handle,
-                                                    field.as_ptr(),
-                                                    array.as_ptr(),
-                                                    array.len() as u64))
+        let data_json = ffi::CString::new(array_interface_str(array, "<u4")).unwrap();
+        xgb_call!(xgboost_sys::XGDMatrixSetInfoFromInterface(self.handle,
+                                                              field.as_ptr(),
+                                                              data_json.as_ptr()))
     }
 }
 
