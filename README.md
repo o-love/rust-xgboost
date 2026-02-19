@@ -1,17 +1,21 @@
 # rust-xgboost
 
-[![Travis Build Status](https://travis-ci.com/davechallis/rust-xgboost.svg?branch=master)](https://travis-ci.com/davechallis/rust-xgboost)
-[![Documentation link](https://docs.rs/xgboost/badge.svg)](https://docs.rs/xgboost/badge.svg)
-
 Rust bindings for the [XGBoost](https://xgboost.ai) gradient boosting library.
 
-* [Documentation](https://docs.rs/xgboost)
+Statically links XGBoost 3.0.5, built from source via cmake — no system-level XGBoost installation required.
 
-Basic usage example:
+## Usage
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+xgboost = "0.3"
+```
+
+Basic example:
 
 ```rust
-extern crate xgboost;
-
 use xgboost::{parameters, DMatrix, Booster};
 
 fn main() {
@@ -26,8 +30,6 @@ fn main() {
 
     // convert training data into XGBoost's matrix format
     let mut dtrain = DMatrix::from_dense(x_train, num_rows).unwrap();
-
-    // set ground truth labels for the training matrix
     dtrain.set_labels(y_train).unwrap();
 
     // test matrix with 1 row
@@ -44,9 +46,9 @@ fn main() {
 
     // configure the tree-based learning model's parameters
     let tree_params = parameters::tree::TreeBoosterParametersBuilder::default()
-            .max_depth(2)
-            .eta(1.0)
-            .build().unwrap();
+        .max_depth(2)
+        .eta(1.0)
+        .build().unwrap();
 
     // overall configuration for Booster
     let booster_params = parameters::BoosterParametersBuilder::default()
@@ -60,10 +62,10 @@ fn main() {
 
     // overall configuration for training/evaluation
     let params = parameters::TrainingParametersBuilder::default()
-        .dtrain(&dtrain)                         // dataset to train with
-        .boost_rounds(2)                         // number of training iterations
-        .booster_params(booster_params)          // model parameters
-        .evaluation_sets(Some(evaluation_sets)) // optional datasets to evaluate against in each iteration
+        .dtrain(&dtrain)
+        .boost_rounds(2)
+        .booster_params(booster_params)
+        .evaluation_sets(Some(evaluation_sets))
         .build().unwrap();
 
     // train model, and print evaluation data
@@ -73,23 +75,50 @@ fn main() {
 }
 ```
 
-See the [examples](https://github.com/davechallis/rust-xgboost/tree/master/examples) directory for
-more detailed examples of different features.
+See the [examples](examples/) directory for more detailed examples including custom objectives, GLMs, and multiclass classification.
 
-## Status
+## Features
 
-Currently in a very early stage of development, so the API is changing as usability issues occur,
-or new features are supported.
+### CUDA / GPU support
 
-Builds against XGBoost 0.81.
+Enable GPU-accelerated training with the `cuda` feature flag:
 
-### Platforms
+```toml
+[dependencies]
+xgboost = { version = "0.3", features = ["cuda"] }
+```
+
+Requires a CUDA toolkit installation. A [Nix flake](flake.nix) is included for reproducible CUDA dev environments:
+
+```sh
+nix develop
+```
+
+### Feature name extraction
+
+Retrieve feature names from a trained model:
+
+```rust
+let feature_names = bst.get_feature_names().unwrap();
+```
+
+### Model serialization
+
+Save/load models in XGBoost's binary format or export the JSON config:
+
+```rust
+bst.save("model.bin").unwrap();
+let bst = Booster::load("model.bin").unwrap();
+
+let json_config = bst.save_json_config().unwrap();
+```
+
+## Platforms
 
 Tested:
+- Linux
+- macOS
 
-* Linux
-* Mac OS
+## License
 
-Unsupported:
-
-* Windows
+MIT
