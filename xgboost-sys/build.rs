@@ -1,11 +1,18 @@
 use std::env;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let target = env::var("TARGET").unwrap();
 
     // Build XGBoost from source using cmake
     let xgboost_src = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("xgboost");
+
+    // Fix macOS static build with OpenMP: XGBoost's FindOpenMPMacOS.cmake adds a
+    // POST_BUILD step that runs install_name_tool on libxgboost.dylib, but when
+    // BUILD_STATIC_LIB=ON only libxgboost.a exists. Guard the patch so it only
+    // runs for shared library builds.
+    patch_openmp_macos_cmake(&xgboost_src);
 
     let mut cmake_cfg = cmake::Config::new(&xgboost_src);
     cmake_cfg
@@ -50,6 +57,16 @@ fn main() {
 
     // Link OpenMP runtime
     if target.contains("apple") {
+        // libomp from Homebrew is keg-only; tell the linker where to find it
+        if let Ok(prefix) = std::process::Command::new("brew")
+            .args(["--prefix", "libomp"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        {
+            if !prefix.is_empty() {
+                println!("cargo:rustc-link-search=native={prefix}/lib");
+            }
+        }
         println!("cargo:rustc-link-lib=omp");
     } else {
         println!("cargo:rustc-link-lib=gomp");
@@ -101,4 +118,22 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings.");
+}
+
+/// Patch XGBoost's CMakeLists.txt so that `patch_openmp_path_macos` is only called
+/// for shared-library builds. The upstream cmake runs `install_name_tool` on
+/// `libxgboost.dylib` unconditionally on macOS+OpenMP, which fails when only a
+/// static library (`libxgboost.a`) is produced.
+fn patch_openmp_macos_cmake(xgboost_src: &Path) {
+    let cmakelists = xgboost_src.join("CMakeLists.txt");
+    let content = fs::read_to_string(&cmakelists).expect("Failed to read XGBoost CMakeLists.txt");
+
+    let patched = content.replace(
+        "if(USE_OPENMP AND APPLE)\n  patch_openmp_path_macos(xgboost libxgboost)",
+        "if(USE_OPENMP AND APPLE AND NOT BUILD_STATIC_LIB)\n  patch_openmp_path_macos(xgboost libxgboost)",
+    );
+
+    if patched != content {
+        fs::write(&cmakelists, patched).expect("Failed to patch XGBoost CMakeLists.txt");
+    }
 }
